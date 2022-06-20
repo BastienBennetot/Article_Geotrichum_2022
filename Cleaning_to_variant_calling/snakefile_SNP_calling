@@ -1,0 +1,237 @@
+shell.executable("/bin/bash")
+from os.path import join
+
+##you have to create /path/to/results_directory/variant_calling first 
+
+# read config info into this namespace
+INPUT_PATH="/path/to/data_directory" # it is a directory with strain/sample directory with reads inside : data_directory/sample1/sample1_R1.fastq.gz data_directory/sample1/sample1_R2.fastq.gz data_directory/sample2/sample2_R1.fastq.gz data_directory/sample2/sample2_R2.fastq.gz
+RESULTS_PATH="/path/to/results_directory" 
+REFERENCE_BOWTIE2="/path/to/genome_ref.fasta" 
+DICT_SAMTOOLS="/path/to/genome_ref.dict" #same as .fasta but replace fasta with ".dict" 
+SAMTOOLS_INDEX="/path/to/genome_ref.fasta.fai"
+ADAPTERS_FILE="/path/to/adapters_file" # file with adapters 
+(SAMPLES,STRAINS,STRANDS) = glob_wildcards(join(INPUT_PATH,"{sample}/{strain}_{strand}.fastq.gz"))
+
+
+### To activate/deactivate rules, comment or uncomment with #
+rule final:
+	input:
+		expand(join(RESULTS_PATH,"mapping/{strain}/{sample}.bam"),zip,sample=SAMPLES,strain=STRAINS), # just the mapping
+		expand(join(RESULTS_PATH,"mapping/{strain}/{sample}_q10_sorted_score_pos_markdup.bam.bai"),zip,sample=SAMPLES,strain=STRAINS), # all the filtering with samtools
+		expand(join(RESULTS_PATH,"variant_calling/{strain}/{sample}.vcf"),zip,sample=SAMPLES,strain=STRAINS), # just the variant calling
+		expand(join(RESULTS_PATH,"GVCFS_combined.vcf")), # combination of VCF
+		expand(join(RESULTS_PATH,"snps.fasta")), # filtering and last part
+
+# Clean reads with Trimmomatic:
+rule trimmomatic:
+        input:
+                fv=join(INPUT_PATH,"{strain}/{sample}_R1.fastq.gz"),
+                rv=join(INPUT_PATH,"{strain}/{sample}_R2.fastq.gz")
+
+        output:
+                out1=join(RESULTS_PATH,"cleaned_reads/{strain}/{sample}_cleaned_R1.fastq.gz"),
+                out2=join(RESULTS_PATH,"cleaned_reads/{strain}/{sample}_R1_unpaired.fastq.gz"),
+                out3=join(RESULTS_PATH,"cleaned_reads/{strain}/{sample}_cleaned_R2.fastq.gz"),
+                out4=join(RESULTS_PATH,"cleaned_reads/{strain}/{sample}_R2_unpaired.fastq.gz")
+        log:
+                "logs/trimmomatic/{strain}_{sample}_trimmomatic.err"
+        threads: 4
+        shell:
+                "TrimmomaticPE -threads {threads} -phred33 {input.fv} {input.rv} {output.out1} {output.out2} {output.out3} {output.out4} ILLUMINACLIP:{ADAPTERS_FILE}:2:30:10 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:20 MINLEN:36 > {log} 2>&1"
+### delete ILLUMINACLIP:{ADAPTERS_FILE}:2:30:10 if not necessary
+
+
+# indexation bowtie2
+rule bowtie2_indexation:
+	input:  
+ 		REFERENCE_BOWTIE2
+	output:
+ 		"{REFERENCE_BOWTIE2}.1.bt2",
+ 		"{REFERENCE_BOWTIE2}.2.bt2",
+ 		"{REFERENCE_BOWTIE2}.3.bt2",
+ 		"{REFERENCE_BOWTIE2}.4.bt2",
+ 		"{REFERENCE_BOWTIE2}.rev.1.bt2",
+ 		"{REFERENCE_BOWTIE2}.rev.2.bt2"
+
+	params:
+		basename=REFERENCE_BOWTIE2
+	shell:
+		"bowtie2-build {input} {params.basename}"
+
+# indexing reference with samtools:
+rule index_samtools:
+        input:
+                REFERENCE_BOWTIE2
+        output:
+                "{REFERENCE_BOWTIE2}.fai"
+        priority:20
+        shell:
+                "samtools faidx {input}"
+
+# Mapping on reference with Bowtie2:
+rule Bowtie2:
+	input:
+		reads_R1=join(RESULTS_PATH,"cleaned_reads/{strain}/{sample}_cleaned_R1.fastq.gz"),
+		reads_R2=join(RESULTS_PATH,"cleaned_reads/{strain}/{sample}_cleaned_R2.fastq.gz"),
+      		ref=expand("{REFERENCE_BOWTIE2}.rev.2.bt2",REFERENCE_BOWTIE2=REFERENCE_BOWTIE2),
+		index=expand("{SAMTOOLS_INDEX}",  SAMTOOLS_INDEX=SAMTOOLS_INDEX)
+	output:
+		temp(join(RESULTS_PATH,"mapping/{strain}/{sample}.bam"))
+	params:
+		index=REFERENCE_BOWTIE2
+	threads:4
+	shell:
+		"bowtie2 --threads {threads} --very-sensitive-local --local --phred33 --rg-id {wildcards.strain} --rg SM:{wildcards.strain} --rg LB:{wildcards.strain} --rg PL:ILLUMINA -x {params.index} -1 {input.reads_R1} -2 {input.reads_R2} -X 1000 | samtools view -bS - > {output}"
+
+# making dict for reference with samtools:
+rule dict_samtools:
+	input:
+		REFERENCE_BOWTIE2
+	output:
+		DICT_SAMTOOLS
+	shell:
+		"samtools dict -o {output} {input}"
+
+
+# Filter by mapq score 10 with samtools
+rule filter_q10_samtools:
+	input:
+		rules.Bowtie2.output
+	output:
+		temp(join(RESULTS_PATH,"mapping/{strain}/{sample}_q10.bam"))
+	shell:
+		"samtools view -b -q 10 {input} > {output}"
+
+# Sorting bam with samtools:
+rule sort_samtools:
+	input:
+		rules.filter_q10_samtools.output	
+	output:
+		temp(join(RESULTS_PATH,"mapping/{strain}/{sample}_q10_sorted.bam"))
+	shell:
+		"samtools sort -n -o {output} {input}"
+
+# Adding Mate Score (MS) and Mate Cigar (MC) for markdup
+rule add_score_samtools:
+	input:
+		rules.sort_samtools.output
+	output:
+		temp(join(RESULTS_PATH,"mapping/{strain}/{sample}_q10_sorted_score.bam"))
+	shell:	
+		"samtools fixmate -m {input} {output}"
+
+# Position order with samtools:
+
+rule position_samtools:
+	input:
+		rules.add_score_samtools.output
+	output:
+		temp(join(RESULTS_PATH,"mapping/{strain}/{sample}_q10_sorted_score_pos.bam"))
+	shell:
+		"samtools sort -o {output} {input}"
+
+# Marking dupe with samtools:
+rule markdup_samtools:
+	input:
+		rules.position_samtools.output
+	output:
+		join(RESULTS_PATH,"mapping/{strain}/{sample}_q10_sorted_score_pos_markdup.bam")
+	shell:
+		"samtools markdup -r {input} {output}"
+
+# Indexing bam with samtools:
+rule index_bam_samtools:
+	input:
+		rules.markdup_samtools.output
+	output:
+		join(RESULTS_PATH,"mapping/{strain}/{sample}_q10_sorted_score_pos_markdup.bam.bai")
+	shell:
+		"samtools index {input}"
+
+# Call germline SNPs and indels via local re-assembly of haplotypes (doc GATK):
+rule haplotypecaller_gatk:
+	input:
+		bam_file=rules.markdup_samtools.output,
+		bam_index_file=rules.index_bam_samtools.output,
+		ref_sam_index=expand(rules.index_samtools.output,REFERENCE_BOWTIE2=REFERENCE_BOWTIE2),
+		ref_sam_dict=expand(rules.dict_samtools.output,REFERENCE_BOWTIE2=REFERENCE_BOWTIE2)
+	output:
+		join(RESULTS_PATH,"variant_calling/{strain}/{sample}.vcf")
+	params:
+		ref=REFERENCE_BOWTIE2
+	shell:
+		"gatk HaplotypeCaller -I {input.bam_file} -O {output} -R {params.ref} -ERC GVCF --sample-ploidy 1"
+
+# Combine all genomic VCF:
+ 
+rule combine_gvcf:
+	input:
+		path_data=RESULTS_PATH,
+		ref=REFERENCE_BOWTIE2,
+		haplo=expand(rules.haplotypecaller_gatk.output,zip,sample=SAMPLES,strain=STRAINS)
+	output:
+		join(RESULTS_PATH,"GVCFS_combined.vcf")
+	shell:
+		"""ls {input.path_data}/variant_calling/*/*.vcf | awk '{{print "-V "$1}}' | xargs | gatk CombineGVCFs $(</dev/stdin) -R {input.ref} -O {output}"""
+
+rule genotype_to_vcf:
+	input:
+		combine_out=rules.combine_gvcf.output,
+		ref=REFERENCE_BOWTIE2
+	output:
+		expand(join(RESULTS_PATH,"GVCFS_combined_genotyped.vcf"))
+	shell:
+		"gatk GenotypeGVCFs  -R {input.ref} -V {input.combine_out} -O {output}"
+			
+rule raw_snps:
+	input:
+		genotype_out=rules.genotype_to_vcf.output,
+		ref=REFERENCE_BOWTIE2
+	output:
+		join(RESULTS_PATH,"raw_snps.vcf")
+	shell:
+		"gatk SelectVariants -R {input.ref} -V {input.genotype_out} -select-type SNP -O {output}"
+
+
+rule filter_snp:
+	input:
+		raw_snps_out=rules.raw_snps.output,
+		ref=REFERENCE_BOWTIE2
+	output:
+		join(RESULTS_PATH,"filtered_snps.vcf")
+	shell:
+		"""gatk VariantFiltration -R {input.ref} -V {input.raw_snps_out} -filter "QUAL < 30 || DP < 10 || QD < 2.0 || FS > 60.0 || MQ < 40.0 || SOR > 3.0 || MQRankSum < -12.5 || ReadPosRankSum < -8.0" --filter-name my_snp_filter -O {output}"""
+
+
+rule snp_pass:
+	input:
+		filter_out=rules.filter_snp.output,
+		ref=REFERENCE_BOWTIE2
+	output:
+		join(RESULTS_PATH,"snps_pass.vcf")
+	shell:
+		"gatk SelectVariants  -R {input.ref} -V {input.filter_out} --exclude-filtered -O {output}"
+
+rule variants_to_table:
+	input:
+		snp_pass_out=rules.snp_pass.output,
+		ref=REFERENCE_BOWTIE2
+	output:
+		join(RESULTS_PATH,"snp.tab")
+
+	shell:	
+		"gatk VariantsToTable  -R {input.ref} -V {input.snp_pass_out} -F CHROM -F POS -F REF -GF GT -O {output}"
+
+rule tab_to_fasta:
+	input:
+		rules.variants_to_table.output
+	output:
+		join(RESULTS_PATH,"snps.fasta")
+	shell:
+		"python3 vcf_fasta.py {input} {output}"
+
+
+
+
+
+
