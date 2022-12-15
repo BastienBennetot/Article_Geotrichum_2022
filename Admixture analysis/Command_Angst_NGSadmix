@@ -1,0 +1,1 @@
+./angsd/angsd -P 10 -b list_bam -ref ../genome/REFERENCE/CLIB918.fasta -out ALL_NGSadmixbetter -uniqueOnly 1 -remove_bads 1 -only_proper_pairs 1 -GL 1 -doMajorMinor 1 -doMaf 1 -doGlf 2 -SNP_pval 1e-6 &
