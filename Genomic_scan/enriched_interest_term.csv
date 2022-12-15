@@ -1,0 +1,13 @@
+"Product"	"n_target_GO"	"n_GO"	"n_target"	"n_gene_total"	"pvalue"	"significant"	"list"	"p_value_adjusted"
+"Ca(2+)-dependent cysteine protease"	1	3	370	7150	0.147369214233012	FALSE	"Cheese_1"	1.76843057079614
+"Conserved hypothetical protein. Putative Carboxylesterase/lipase family protein"	1	4	370	7150	0.191509887345337	FALSE	"Cheese_1"	2.29811864814404
+"triacylglycerol lipase"	1	1	370	7150	0.0517482517482519	FALSE	"Cheese_1"	0.620979020979023
+"sphingolipid homeostasis protein orm1"	1	2	370	7150	0.100825485886333	FALSE	"Cheese_1"	1.209905830636
+"L-galactonate dehydratase"	1	1	370	7150	0.0517482517482519	FALSE	"Cheese_1"	0.620979020979023
+"cysteine protease"	1	1	370	7150	0.0517482517482519	FALSE	"Cheese_1"	0.620979020979023
+"galactose-1-phosphate uridyl transferase"	1	1	370	7150	0.0517482517482519	FALSE	"Cheese_1"	0.620979020979023
+"lipid-binding protein"	1	2	509	7150	0.137319024520032	FALSE	"Cheese_3"	1.64782829424038
+"Putative aminophospholipid-translocase"	1	2	509	7150	0.137319024520032	FALSE	"Cheese_3"	1.64782829424038
+"Conserved hypothetical protein. Putative Carboxylesterase/lipase family protein"	1	4	509	7150	0.255813458641766	FALSE	"Cheese_3"	3.06976150370119
+"lactose regulatory protein lac9 and GAL4-like protein"	1	1	509	7150	0.0711888111888113	FALSE	"Cheese_3"	0.854265734265735
+"ubiquitin-specific protease ubp15"	1	1	509	7150	0.0711888111888113	FALSE	"Cheese_3"	0.854265734265735

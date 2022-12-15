@@ -1,0 +1,4 @@
+"Product";"n_target_GO";"n_GO";"n_target";"n_gene_total";"pvalue";"significant";"list";"p_value_adjusted"
+"Ca(2+)-dependent cysteine protease";1;3;78;7150;0,0323760251639155;FALSE;"Cheese_1_Wild";0,0971280754917464
+"Conserved hypothetical protein. Putative ADAM family of metalloprotease";1;1;78;7150;0,010909090909091;TRUE;"Cheese_1_Wild";0,0327272727272729
+"Ca(2+)-dependent cysteine protease";1;3;78;7150;0,0323760251639155;FALSE;"Cheese_3_Wild";0,0971280754917464
