@@ -1,0 +1,28 @@
+shell.executable("/bin/bash")
+from os.path import join
+
+# read config info into this namespace
+#configfile: "config.yaml"
+
+K=list(range(2,9))
+Q=list(range(1,101))
+
+
+rule all:
+	input:
+		expand("/home/bastien/NGSadmix/NGSadmix_results/NGSadmix_K{K}_repeat_{Q}.fopt.gz", K=K, Q=Q)
+# indexation bowtie2
+ 
+rule NGSadmix_run:
+	input:  
+ 		infile = "/home/bastien/NGSadmix/NGSadmix_Gcandidum.beagle.gz",
+	params:
+		K = K,
+		Q = Q,
+		prefix="/home/bastien/NGSadmix/NGSadmix_results/NGSadmix_K{K}_repeat_{Q}"
+	output:
+ 		"/home/bastien/NGSadmix/NGSadmix_results/NGSadmix_K{K}_repeat_{Q}.fopt.gz",
+		"/home/bastien/NGSadmix/NGSadmix_results/NGSadmix_K{K}_repeat_{Q}.qopt"
+	threads:4
+	shell:
+		"/home/bastien/NGSadmix/NGSadmix -likes /home/bastien/NGSadmix/NGSadmix_Gcandidum.beagle.gz -K {wildcards.K} -minInd 4 -P {threads} -outfiles {params.prefix}"
